@@ -23,17 +23,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
 
+      # One environment for the whole job. Creating it first matters: a bare
+      # `uv run` makes a .venv of its own, and a later `uv venv` then refuses
+      # to overwrite it — which is exactly how the first v0.1.0 tag failed.
+      - run: uv venv
+      - run: uv pip install -e '.[dev]'
+
       - name: The tag and the package must agree
         # The version lives in inshirah/__init__.py. A tag that says otherwise
         # would publish a release nobody can reproduce from the source.
         run: |
           tagged="${GITHUB_REF_NAME#v}"
-          packaged=$(uv run --with . python -c 'import inshirah; print(inshirah.__version__)')
+          packaged=$(uv run python -c 'import inshirah; print(inshirah.__version__)')
           test "$tagged" = "$packaged" || {
             echo "tag $GITHUB_REF_NAME does not match __version__ $packaged"; exit 1;
           }
 
-      - run: uv venv && uv pip install -e '.[dev]'
       - run: uv run pytest -q
 
       - run: uv build
