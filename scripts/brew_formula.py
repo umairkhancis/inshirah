@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Regenerate deploy/homebrew/inshirah.rb from what PyPI is serving.
+
+`brew update-python-resources` cannot do this job, for two reasons:
+
+  * It passes `--uploaded-prior-to=P1D` to pip, so it cannot see a release
+    published in the last 24 hours — which is every release, on release day.
+  * It writes sdist resources. Three of the dependencies would then need a Rust
+    toolchain to build, and claude-agent-sdk's sdist carries no Claude Code
+    binary at all (only scripts/download_cli.py, which fetches one at build
+    time, and Homebrew builds offline). A source install of that package yields
+    an Inshirah that installs cleanly and cannot start a session.
+
+So resources are pinned to wheels here instead. Homebrew keeps the .whl file
+only for pure-python wheels (see the `py3[^-]*-none-any.whl` test in
+Library/Homebrew/language/python.rb) and unpacks every other one into a
+directory that pip cannot install; the formula's `install` works around that by
+installing those from the cached download. Anything in this file that looks
+fussy is load-bearing for one of those reasons.
+
+    python3 scripts/brew_formula.py 0.1.0 > deploy/homebrew/inshirah.rb
+"""
+
+import json
+import re
+import subprocess
+import sys
+import tempfile
+import urllib.request
+from pathlib import Path
+
+PYTHON = "/opt/homebrew/opt/python@3.13/libexec/bin/python"
+TAG = "cp313"          # must match the `depends_on "python@3.13"` below
+NAME = "inshirah"
+
+
+def resolve(version):
+    """The full dependency set pip would install, via its own resolver."""
+    with tempfile.TemporaryDirectory() as tmp:
+        report = Path(tmp) / "report.json"
+        subprocess.run(
+            [PYTHON, "-m", "pip", "install", "-q", "--disable-pip-version-check",
+             "--dry-run", "--ignore-installed", f"--report={report}",
+             f"{NAME}=={version}"],
+            check=True,
+        )
+        data = json.loads(report.read_text())
+    return sorted(
+        {(i["metadata"]["name"], i["metadata"]["version"])
+         for i in data["install"]
+         if i["metadata"]["name"].lower() != NAME},
+        key=lambda p: p[0].lower(),
+    )
+
+
+def pypi(name, version):
+    url = f"https://pypi.org/pypi/{name}/{version}/json"
+    with urllib.request.urlopen(url) as r:
+        return json.load(r)["urls"]
+
+
+def usable(filename):
+    if "pp3" in filename:                        # pypy
+        return False
+    if re.search(r"cp3\d+t-", filename):         # free-threaded ABI, not ours
+        return False
+    return TAG in filename or "abi3" in filename or "py3-none" in filename
+
+
+def wheel_for(files, arch):
+    want = ("arm64", "universal2") if arch == "arm" else ("x86_64", "universal2")
+    cands = [
+        f for f in files
+        if f["filename"].endswith(".whl") and "macosx" in f["filename"]
+        and usable(f["filename"]) and any(w in f["filename"] for w in want)
+    ]
+    if not cands:
+        return None
+
+    def rank(f):
+        m = re.search(r"macosx_(\d+)_(\d+)", f["filename"])
+        native = 0 if "universal2" in f["filename"] else 1
+        return native, (int(m[1]), int(m[2])) if m else (0, 0)
+
+    return sorted(cands, key=rank)[-1]
+
+
+def canonical(name):
+    """brew audit wants the PyPI project name, which differs only in spelling."""
+    return {"typing_extensions": "typing-extensions",
+            "pydantic_core": "pydantic-core"}.get(name, name)
+
+
+def block(name, f, indent):
+    pad = " " * indent
+    return (f'{pad}resource "{canonical(name)}" do\n'
+            f'{pad}  url "{f["url"]}"\n'
+            f'{pad}  sha256 "{f["digests"]["sha256"]}"\n'
+            f'{pad}end\n')
+
+
+def main(version):
+    files = pypi(NAME, version)
+    sdist = next(f for f in files if f["packagetype"] == "sdist")
+
+    pure, split = [], []
+    for name, ver in resolve(version):
+        fs = pypi(name, ver)
+        anywheel = [f for f in fs if f["filename"].endswith("-none-any.whl")]
+        if anywheel:
+            pure.append((name, anywheel[0]))
+            continue
+        arm, intel = wheel_for(fs, "arm"), wheel_for(fs, "intel")
+        if not arm:
+            sys.exit(f"no usable arm64 wheel for {name} {ver}")
+        if not intel:
+            # cryptography publishes none for Intel; fall back to source there
+            intel = next(f for f in fs if f["packagetype"] == "sdist")
+        split.append((name, arm, intel))
+
+    wheels = sorted(canonical(n) for n, a, i in split
+                    if i["packagetype"] != "sdist")
+
+    print(TEMPLATE.format(
+        url=sdist["url"],
+        sha256=sdist["digests"]["sha256"],
+        arm="\n".join(block(n, a, 4) for n, a, i in split),
+        intel="\n".join(block(n, i, 4) for n, a, i in split),
+        pure="\n".join(block(n, f, 2) for n, f in pure),
+        wheels=" ".join(wheels),
+    ), end="")
+
+
+TEMPLATE = '''# Homebrew formula for Inshirah. Generated by scripts/brew_formula.py — do not
+# hand-edit; see docs/homebrew.md for the release checklist.
+#
+# Resources are pinned to wheels, not sdists, and that is deliberate.
+# claude-agent-sdk's sdist contains no Claude Code binary at all: only
+# scripts/download_cli.py, which fetches one at build time. A source install of
+# it therefore yields an Inshirah that installs cleanly and cannot start a
+# session. The binary ships only in the platform wheels, which is also why this
+# is a ~250 MB install.
+class Inshirah < Formula
+  include Language::Python::Virtualenv
+
+  desc "Thoughtful surface over Claude Code: edit any message, branch any thread"
+  homepage "https://github.com/umairkhancis/inshirah"
+  url "{url}"
+  sha256 "{sha256}"
+  license "MIT"
+
+  depends_on "python@3.13"
+
+  on_arm do
+{arm}  end
+
+  on_intel do
+    # cryptography (via PyJWT[crypto]) publishes no Intel macOS wheel, so Intel
+    # alone builds it from source and needs a toolchain to do it.
+    depends_on "rust" => :build
+    depends_on "openssl@3"
+
+{intel}  end
+
+{pure}
+  # Homebrew keeps the .whl file only for pure-python wheels — see the
+  # `py3[^-]*-none-any.whl` test in Library/Homebrew/language/python.rb. Any
+  # other wheel is unpacked into a directory, and pip cannot install an unpacked
+  # wheel as a source tree. These are installed from the cached download
+  # instead, copied back to its real filename first so pip can read the
+  # compatibility tags out of it.
+  PLATFORM_WHEELS = %w[{wheels}].freeze
+
+  def install
+    venv = virtualenv_create(libexec, "python3.13")
+
+    wheels = PLATFORM_WHEELS.dup
+    wheels << "cryptography" if Hardware::CPU.arm?
+
+    venv.pip_install(resources.reject {{ |r| wheels.include?(r.name) }})
+
+    wheels.each do |name|
+      r = resource(name)
+      whl = buildpath/File.basename(r.url)
+      cp r.cached_download, whl
+      venv.pip_install whl
+    end
+
+    venv.pip_install_and_link buildpath
+  end
+
+  test do
+    assert_match "inshirah #{{version}}", shell_output("#{{bin}}/inshirah --version")
+    # Local-only and starts no session, so it is safe with no network and no
+    # Claude Code login.
+    assert_match "no telemetry", shell_output("#{{bin}}/inshirah --privacy")
+  end
+end
+'''
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit(__doc__.strip().splitlines()[-1].strip())
+    main(sys.argv[1])
