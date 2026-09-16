@@ -27,6 +27,7 @@ from textual.widgets import Button, Footer, Static, TextArea
 
 from inshirah.core import (
     Conversation,
+    ConversationBusy,
     ConversationRegistry,
     Harness,
     MemoryStorage,
@@ -38,6 +39,7 @@ from inshirah.core import (
     split_command,
 )
 from inshirah.tui import design, permissions
+from inshirah.tui.delete import DeleteConversation
 from inshirah.tui.design import GLYPHS
 from inshirah.tui.environment_report import EnvironmentReport
 from inshirah.tui.rename import RenameConversation
@@ -69,6 +71,7 @@ class InshirahApp(App):
         # short enough to read.
         Binding("ctrl+s", "save_edit", "Save edit", priority=True, show=False),
         Binding("ctrl+r", "rename", "Rename", priority=True, show=False),
+        Binding("ctrl+d", "delete_conversation", "Delete", priority=True, show=False),
         Binding("ctrl+up", "select_prev", "Select earlier", priority=True, show=False),
         Binding("ctrl+down", "select_next", "Select later", priority=True, show=False),
         Binding("escape", "cancel_edit", "Cancel", priority=True, show=False),
@@ -123,6 +126,10 @@ class InshirahApp(App):
             if self._command_menu_open():
                 return False  # escape closes the menu, not the thread
             return self.editor is not None or self.thread is not None
+        if action == "delete_conversation":
+            # Priority beats a screen's own bindings, so without this ctrl+d
+            # inside the confirm would stack a second one on top of it.
+            return len(self.screen_stack) == 1
         return True
 
     def _command_menu_open(self) -> bool:
@@ -279,6 +286,58 @@ class InshirahApp(App):
         self.active = "main"
         await self.refresh_all()
         self.main_pane.composer.focus_input()
+
+    @on(RailItem.DeleteRequested)
+    def rail_delete_requested(self, event: RailItem.DeleteRequested) -> None:
+        """The ✕ acts on that row, which need not be the one you are in."""
+        self.confirm_delete(event.tree_id)
+
+    def action_delete_conversation(self) -> None:
+        """ctrl+d acts on the conversation in front of you."""
+        if self.conversation is not None:
+            self.confirm_delete(self.conversation.id)
+
+    @work
+    async def confirm_delete(self, tree_id: str) -> None:
+        # A worker because push_screen_wait needs one, as with rename.
+        summary = next(
+            (s for s in self.registry.listing() if s["id"] == tree_id), None
+        )
+        if summary is None:  # already gone; nothing to ask about
+            return
+        if not await self.push_screen_wait(DeleteConversation(summary)):
+            return
+        await self.delete_conversation(tree_id)
+
+    async def delete_conversation(self, tree_id: str) -> None:
+        """Drop it, and make sure something is still on screen afterwards.
+
+        Deleting the conversation you are in leaves the main pane pointing at
+        nothing, so the next one down the rail takes its place — and if it was
+        the last one, a fresh conversation does, because an app with no
+        conversation open has no composer to type in.
+        """
+        try:
+            self.registry.delete(tree_id)
+        except ConversationBusy:
+            self.notify(
+                "That conversation is mid-turn. Wait for the reply, then "
+                "delete it.",
+                severity="warning",
+            )
+            return
+        if self.conversation is not None and self.conversation.id == tree_id:
+            remaining = self.registry.listing()
+            self.conversation = (
+                self.registry.get(remaining[0]["id"])
+                if remaining
+                else self.registry.create()
+            )
+            self.thread = None  # it belonged to the conversation just deleted
+            self.active = "main"
+        await self.refresh_all()
+        self.notify("Conversation deleted.")
+        self.pane.composer.focus_input()
 
     @on(Composer.Submitted)
     async def composer_submitted(self, event: Composer.Submitted) -> None:

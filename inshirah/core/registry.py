@@ -22,7 +22,7 @@ import pathlib
 from typing import Any, Protocol
 
 from .conversation import Conversation
-from .errors import ConversationNotFound
+from .errors import ConversationBusy, ConversationNotFound
 from .harness import Harness
 
 
@@ -184,6 +184,17 @@ class ConversationRegistry:
         self.storage.save(tree.root.id, tree.dump())
 
     def delete(self, tree_id: str) -> None:
+        """Forget a conversation and everything under it, permanently.
+
+        Refused while a turn is running: the client saves the tree when the turn
+        finishes, so a delete underneath one would be undone the moment the
+        reply landed — and the reply would be written to a conversation the user
+        has been told is gone. Deleting an id that is not here is not an error;
+        the caller wanted it absent, and it is.
+        """
+        live = self._live.get(tree_id)
+        if live is not None and live.busy:
+            raise ConversationBusy("a turn is running; wait for it to finish")
         self._live.pop(tree_id, None)
         self.storage.delete(tree_id)
 

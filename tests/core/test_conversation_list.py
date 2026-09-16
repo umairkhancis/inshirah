@@ -12,6 +12,8 @@ from conftest import SESSION, assistant_entry, user_entry
 
 from inshirah.core import (
     Conversation,
+    ConversationBusy,
+    ConversationNotFound,
     ConversationRegistry,
     FileStorage,
     Harness,
@@ -107,6 +109,54 @@ def test_clearing_a_name_goes_back_to_the_derived_one():
     tree = registry.create(name="Temporary")
     registry.rename(tree.id, "   ")
     assert registry.listing()[0]["name"] == "New conversation"
+
+
+# --- removing ------------------------------------------------------------
+
+
+def test_deleting_takes_a_conversation_out_of_the_listing():
+    registry = ConversationRegistry()
+    keep, drop = registry.create(name="Keep"), registry.create(name="Drop")
+    registry.delete(drop.id)
+    assert [s["name"] for s in registry.listing()] == ["Keep"]
+
+
+def test_deleting_takes_the_file_with_it(tmp_path):
+    """Gone from the rail is not enough — a relaunch reads the directory."""
+    storage = FileStorage(tmp_path)
+    tree = ConversationRegistry(storage).create()
+    ConversationRegistry(storage).delete(tree.id)
+    assert list(tmp_path.glob("*.json")) == []
+    assert ConversationRegistry(FileStorage(tmp_path)).listing() == []
+
+
+def test_deleting_forgets_the_live_copy_too():
+    """Left live, the next get() would hand back a conversation with no file."""
+    registry = ConversationRegistry()
+    tree = registry.create()
+    registry.delete(tree.id)
+    with pytest.raises(ConversationNotFound):
+        registry.get(tree.id)
+
+
+def test_a_conversation_mid_turn_is_not_deleted_underneath_it():
+    """The turn saves the tree when it ends, which would write the file back."""
+    registry = ConversationRegistry()
+    tree = registry.create()
+
+    async def while_a_turn_holds_the_lock() -> None:
+        async with tree.root._lock:
+            with pytest.raises(ConversationBusy):
+                registry.delete(tree.id)
+
+    asyncio.run(while_a_turn_holds_the_lock())
+    assert [s["id"] for s in registry.listing()] == [tree.id]
+
+
+def test_deleting_what_is_not_there_is_not_an_error():
+    """Two rails over one directory, or a second click on the same ✕."""
+    registry = ConversationRegistry()
+    registry.delete("nothing-by-that-name")
 
 
 # --- durability ----------------------------------------------------------

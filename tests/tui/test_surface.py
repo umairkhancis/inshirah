@@ -13,6 +13,7 @@ from textual.widgets import Static, TextArea
 from inshirah.core import FileStorage
 from inshirah.tui import design
 from inshirah.tui.app import InshirahApp
+from inshirah.tui.delete import DeleteConversation
 from inshirah.tui.widgets import MessageRow, RailItem, Starter
 
 KEY = {"project_key": "proj", "session_id": SESSION}
@@ -37,6 +38,15 @@ async def seed(app, text="What is an index?") -> None:
     )
     app.conversation._sync()
     await app.refresh_all()
+
+
+async def confirm_screen(app, pilot):
+    """The confirm is pushed from a worker, so pump until it is actually up."""
+    for _ in range(20):
+        if isinstance(app.screen, DeleteConversation):
+            return app.screen
+        await pilot.pause()
+    raise AssertionError("the delete confirmation never opened")
 
 
 # --- landing -------------------------------------------------------------
@@ -131,6 +141,151 @@ def test_clicking_the_rail_switches_conversation():
     result = run(scenario)
     assert result["back"] is True
     assert result["name"] == "# What is an index?"
+
+
+# --- deleting ------------------------------------------------------------
+
+
+def test_the_delete_glyph_asks_before_it_removes_anything():
+    """Irreversible, one click away from navigation — so it asks, by name."""
+
+    async def scenario(app, pilot, out):
+        await seed(app)
+        await pilot.pause()  # let the rail lay out before aiming at it
+        await pilot.click(".rail-delete")
+        confirm = await confirm_screen(app, pilot)  # raises if it never opened
+        out["subject"] = str(confirm.query_one("#subject").content)
+        out["why"] = str(confirm.query_one("#why").content)
+        await pilot.press("escape")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        out["still_there"] = [i.summary["name"] for i in app.query(RailItem)]
+
+    result = run(scenario)
+    assert result["subject"] == "What is an index?"
+    assert result["why"].startswith("2 messages go with it")
+    assert result["still_there"] == ["What is an index?"]  # escape kept it
+
+
+def test_clicking_the_rest_of_the_row_still_just_opens_it():
+    """One row, two targets — only the ✕ is destructive."""
+
+    async def scenario(app, pilot, out):
+        await seed(app)
+        await pilot.pause()
+        await pilot.click(".rail-name")
+        await pilot.pause()
+        await pilot.pause()
+        out["asked"] = isinstance(app.screen, DeleteConversation)
+
+    assert run(scenario)["asked"] is False
+
+
+def test_confirming_takes_the_conversation_out_of_the_rail():
+    async def scenario(app, pilot, out):
+        await seed(app)
+        await app.action_new_conversation()
+        await pilot.pause()
+        doomed = [i for i in app.query(RailItem) if i.summary["name"] == "What is an index?"][0]
+        doomed.post_message(RailItem.DeleteRequested(doomed.tree_id))
+        confirm = await confirm_screen(app, pilot)
+        confirm.query_one("#delete").press()
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        out["rail"] = [i.summary["name"] for i in app.query(RailItem)]
+        out["current"] = app.conversation.display_name()
+
+    result = run(scenario)
+    assert result["rail"] == ["New conversation"]
+    assert result["current"] == "New conversation"  # the one you were in, untouched
+
+
+def test_deleting_the_conversation_you_are_in_opens_the_next_one():
+    """The main pane cannot be left pointing at something that is gone."""
+
+    async def scenario(app, pilot, out):
+        await seed(app)
+        kept = app.conversation.id
+        await app.action_new_conversation()
+        await pilot.pause()
+        await app.delete_conversation(app.conversation.id)
+        await pilot.pause()
+        out["now"] = app.conversation.id
+        out["kept"] = kept
+        out["rail"] = [i.tree_id for i in app.query(RailItem)]
+
+    result = run(scenario)
+    assert result["now"] == result["kept"]
+    assert result["rail"] == [result["kept"]]
+
+
+def test_deleting_the_last_conversation_leaves_a_fresh_one():
+    """An app with nothing open has no composer to type into."""
+
+    async def scenario(app, pilot, out):
+        await seed(app)
+        gone = app.conversation.id
+        await app.delete_conversation(gone)
+        await pilot.pause()
+        out["same"] = app.conversation.id == gone
+        out["turns"] = len(app.conversation.turns)
+        out["welcome"] = bool(app.query("#welcome"))
+        out["rail"] = len(app.query(RailItem))
+
+    result = run(scenario)
+    assert result["same"] is False
+    assert result["turns"] == 0
+    assert result["welcome"] is True
+    assert result["rail"] == 1
+
+
+def test_deleting_the_conversation_you_are_in_closes_its_thread():
+    """The thread column belongs to the conversation that is going away."""
+
+    async def scenario(app, pilot, out):
+        await seed(app)
+        row = [r for r in app.main_pane.rows if r.uuid == "a1"][0]
+        await app.open_thread_on(app.main_pane, row)
+        await pilot.pause()
+        out["open_before"] = app.thread is not None
+        await app.delete_conversation(app.conversation.id)
+        await pilot.pause()
+        out["open_after"] = app.thread is not None
+        out["hidden"] = app.thread_pane.has_class("hidden")
+
+    result = run(scenario)
+    assert result["open_before"] is True
+    assert result["open_after"] is False
+    assert result["hidden"] is True
+
+
+def test_a_deleted_conversation_stays_deleted_after_a_restart(tmp_path):
+    """Two apps over one directory, as a quit and a relaunch would be."""
+
+    async def first(app, pilot, out):
+        await seed(app, "Throwaway")
+        await app.delete_conversation(app.conversation.id)
+        await pilot.pause()
+
+    async def second(app, pilot, out):
+        out["names"] = [i.summary["name"] for i in app.query(RailItem)]
+
+    run(first, storage=FileStorage(tmp_path))
+    assert run(second, storage=FileStorage(tmp_path))["names"] == ["New conversation"]
+
+
+def test_a_conversation_mid_turn_is_kept_and_said_so():
+    """Deleting under a running turn would be undone by the turn's own save."""
+
+    async def scenario(app, pilot, out):
+        await seed(app)
+        async with app.conversation.root._lock:  # stands in for a turn in flight
+            await app.delete_conversation(app.conversation.id)
+        await pilot.pause()
+        out["rail"] = [i.summary["name"] for i in app.query(RailItem)]
+
+    assert run(scenario)["rail"] == ["What is an index?"]
 
 
 def test_conversations_survive_a_restart(tmp_path):

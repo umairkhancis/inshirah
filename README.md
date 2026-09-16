@@ -87,6 +87,7 @@ access and no login.
 | `ctrl+e` | edit the selected message |
 | `ctrl+t` | branch a thread off it |
 | `ctrl+n` | new conversation |
+| `ctrl+d` | delete this conversation (the rail's `✕` deletes any of them) |
 | `ctrl+x` | export the conversation to markdown |
 | `ctrl+i` | what this project loaded |
 | `ctrl+g` | show/hide the conversation rail |

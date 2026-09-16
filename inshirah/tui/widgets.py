@@ -594,6 +594,11 @@ class RailItem(Static):
             super().__init__()
             self.tree_id = tree_id
 
+    class DeleteRequested(TextualMessage):
+        def __init__(self, tree_id: str) -> None:
+            super().__init__()
+            self.tree_id = tree_id
+
     def __init__(self, summary: dict, current: bool) -> None:
         super().__init__(classes="rail-item")
         self.tree_id = summary["id"]
@@ -603,15 +608,26 @@ class RailItem(Static):
 
     def compose(self) -> ComposeResult:
         marker = GLYPHS["dot"] if self.has_class("current") else " "
-        yield Static(f"{marker} {self.summary['name']}", classes="rail-name")
+        # Text(): the name is whatever was first asked here, or whatever the
+        # user typed into rename, and neither is markup.
+        yield Static(Text(f"{marker} {self.summary['name']}"), classes="rail-name")
         bits = []
         if self.summary["messages"]:
             bits.append(str(self.summary["messages"]))
         if self.summary["threads"]:
             bits.append(f"{GLYPHS['thread']}{self.summary['threads']}")
         yield Static(" ".join(bits), classes="rail-count")
+        yield Static(GLYPHS["close"], classes="rail-delete")
 
-    def on_click(self) -> None:
+    def on_click(self, event) -> None:
+        # One row, two targets — the ✕ throws the conversation away, everything
+        # else opens it. Drawn always rather than on hover: a row you can only
+        # discover by finding it with the mouse is not an affordance, and the
+        # confirm is what stands between a mis-click and a loss.
+        if isinstance(event.widget, Static) and event.widget.has_class("rail-delete"):
+            event.stop()
+            self.post_message(self.DeleteRequested(self.tree_id))
+            return
         self.post_message(self.Chosen(self.tree_id))
 
 
