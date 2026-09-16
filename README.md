@@ -94,6 +94,7 @@ access and no login.
 ```sh
 inshirah --check        # what this directory loads: skills, agents, MCP, memory
 inshirah --privacy      # what leaves this machine, and where your data is
+inshirah --stats        # what this copy has counted, and an offer to share it
 inshirah --help         # flags that narrow what the agent may do
 ```
 
@@ -103,8 +104,9 @@ your project already does that.
 
 ## What leaves your machine
 
-Nothing, to us. There is no Inshirah account, no Inshirah server and no
-telemetry — there is nowhere for anything to be sent.
+Nothing, on its own. There is no Inshirah account and no Inshirah server, and
+this program has no way to send anything anywhere — the package imports no HTTP
+client at all, and `tests/test_privacy.py` fails the build if one is ever added.
 
 - **Model traffic** goes to Anthropic through *your* Claude Code install, signed
   in as you, billed to you. Inshirah never sees a key of yours.
@@ -114,9 +116,27 @@ telemetry — there is nowhere for anything to be sent.
   you launched in, under the permission mode you chose.
 
 Run `inshirah --privacy` to have the installed copy tell you the same thing with
-your machine's real paths. The package imports no HTTP client at all, and
-`tests/test_privacy.py` is the test that keeps it that way — it fails the build
-if one is ever added.
+your machine's real paths.
+
+### The one number this project would like
+
+`~/.inshirah/usage.json` is a file of integers, written as you work: how many
+sessions, how many messages you edited, how many threads you branched. Never
+prompts, never replies, never file names, never paths, never anything that
+identifies you or this machine. `INSHIRAH_NO_USAGE=1` keeps none of it, and `rm`
+forgets it.
+
+`inshirah --stats` prints that file. If you would like to hand the numbers over,
+it opens a form in your browser with them already filled in — you read them
+there and press Submit, or you close the tab. Nothing is sent by the program,
+which is why this is the only mechanism on offer: a project that promises it
+cannot phone home does not then get to phone home about how well the promise is
+going.
+
+It is worth saying plainly why you are being asked. Inshirah has no analytics,
+so the only evidence that editing a reply in place is useful to anyone other
+than its author is the people who choose to say so. [Where the numbers go, and
+what may ever be in them](docs/stats-form.md).
 
 ## Develop
 

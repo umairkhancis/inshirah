@@ -9,7 +9,7 @@ network client, and the statement it prints has to keep matching the code.
 import ast
 import pathlib
 
-from inshirah.core import privacy_report
+from inshirah.core import privacy_report, share, usage
 
 PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "inshirah"
 
@@ -93,6 +93,66 @@ def test_the_statement_is_unambiguous_about_telemetry():
     report = privacy_report("~/.inshirah")
     assert "no telemetry" in report
     assert "no account" in report
+
+
+def test_the_statement_names_the_usage_file_and_the_way_out_of_it():
+    """The counts are the one thing kept for the project rather than the user,
+    so the statement has to name them, name where they are, and name the switch
+    that turns them off — otherwise finding the file is a nasty surprise."""
+    report = privacy_report("~/.inshirah")
+    assert str(usage.path()) in report
+    assert usage.DISABLE in report
+
+
+# --- the counts may only ever be counts ------------------------------------
+#
+# ``usage`` exists to answer one question: is editing in place actually used.
+# The failure mode is not that it sends too often — it cannot send at all — it
+# is that the payload quietly grows a field with content in it, because a
+# prompt or a path would be so much more informative than a number. These are
+# the tests that make that a deliberate act rather than a convenient one.
+
+SHAREABLE_TEXT = ("inshirah", "os")
+
+
+def test_everything_shared_is_a_number_except_two_named_strings():
+    payload = usage.summary()
+    for key, value in payload.items():
+        if key in SHAREABLE_TEXT:
+            assert isinstance(value, str)
+        else:
+            assert isinstance(value, int), f"{key} is not a count"
+
+
+def test_the_shared_payload_is_the_declared_set_and_nothing_else():
+    """A new key is a new thing collected. It should not be possible to add one
+    without this line changing, and this line is short enough to read."""
+    assert set(usage.summary()) == {
+        "inshirah",
+        "os",
+        "days",
+        "sessions",
+        "conversations",
+        "turns",
+        "edits",
+        "edits_user",
+        "edits_assistant",
+        "resends",
+        "threads",
+        "shell_holds",
+        "exports",
+        "sessions_2plus_edits",
+    }
+
+
+def test_the_form_url_carries_the_payload_and_nothing_else(monkeypatch):
+    monkeypatch.setattr(share, "FORM_ID", "TEST_FORM")
+    monkeypatch.setattr(share, "FIELDS", {"edits": "entry.1", "sessions": "entry.2"})
+    url = share.url({"edits": 4, "sessions": 2, "os": "Darwin"})
+    assert url.startswith("https://docs.google.com/forms/d/e/TEST_FORM/viewform?")
+    assert "entry.1=4" in url and "entry.2=2" in url
+    # `os` has no question on this form, so it is dropped rather than smuggled.
+    assert "Darwin" not in url
 
 
 def test_the_statement_says_whose_key_pays():
