@@ -44,16 +44,19 @@ ignored. Holding it is also what makes the output editable before the model
 reads it — see ``pending_turns`` / ``edit_pending`` / ``drop_pending``.
 
 ``usage`` counts what was used — sessions, edits, threads — into a file in the
-user's home directory. A client instruments nothing itself: the counters live on
-the engine's own methods, so a second front end gets them without knowing they
-exist. The one thing a client must do is call ``usage.start_session()`` when it
-starts, because only a client knows what a session is.
+user's home directory, and ``share`` turns those counts into a prefilled form
+URL. Neither can transmit: there is no HTTP client in this package, and the
+browser handoff is the whole of the mechanism. A client instruments nothing
+itself; the counters live on the engine's own methods so a second front end
+gets them without knowing they exist. The one thing a client must do is call
+``usage.start_session()`` when it starts, because only a client knows what a
+session is.
 
 Still open before a web app feels right: ``send()`` runs a turn to completion
 and returns, so there is no token streaming yet.
 """
 
-from . import usage
+from . import share, usage
 from .commands import SlashCommand, load as load_commands, split as split_command
 from .config import PROVIDER, PROVIDER_NAME, PROVIDERS, Provider
 from .conversation import Conversation, Turn
@@ -96,8 +99,9 @@ __all__ = [
     "claude_binary",
     # the claim that there is no backend, printed from the code
     "privacy_report",
-    # what this copy has been used for, counted on this machine
+    # local usage counts, and the browser handoff that is the only way out
     "usage",
+    "share",
     # slash commands, as the CLI reports them
     "SlashCommand",
     "load_commands",

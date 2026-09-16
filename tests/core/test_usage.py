@@ -1,9 +1,10 @@
-"""The counters.
+"""The counters, and the browser handoff that is the only way they leave.
 
-A counter nobody checks is worse than no counter, because it gets believed.
-These are the checks: that the numbers go up when the thing they name happens,
-that they survive a file nobody should have been editing, and that a session
-which ended badly still lands in the histogram.
+Two things are being held in place here. That the numbers are right — a counter
+nobody checks is worse than no counter, because it gets believed. And that the
+mechanism stays incapable of sending anything by itself; ``tests/test_privacy.py``
+holds the second one at the level of the whole package, and these tests hold it
+at the level of the one module that names a remote host.
 """
 
 import asyncio
@@ -12,7 +13,7 @@ import json
 import pytest
 from conftest import SESSION, assistant_entry, user_entry
 
-from inshirah.core import Conversation, usage
+from inshirah.core import Conversation, share, usage
 
 
 @pytest.fixture
@@ -218,3 +219,62 @@ def test_a_thread_is_not_counted_as_a_conversation(convo):
     usage.reset()
     convo.thread_for("a1")
     assert usage.load()["totals"]["conversations"] == 0
+
+
+# --- the handoff -----------------------------------------------------------
+
+
+def test_this_build_knows_where_to_send_them():
+    assert share.configured()
+    assert share.url(usage.summary()).startswith(
+        f"https://docs.google.com/forms/d/e/{share.FORM_ID}/viewform?"
+    )
+
+
+def test_every_number_has_somewhere_to_land(monkeypatch):
+    """A key with no question is dropped silently — which is right for a fork
+    with an older form, and wrong for this build, where it would mean a counter
+    quietly not being collected."""
+    monkeypatch.delenv(share.FORM_ID_ENV, raising=False)
+    assert set(usage.summary()) == set(share.FIELDS)
+
+
+def test_a_build_with_no_form_says_so_rather_than_opening_a_broken_link(monkeypatch):
+    monkeypatch.setattr(share, "FORM_ID", "")
+    monkeypatch.setattr(share, "FIELDS", {})
+    monkeypatch.delenv(share.FORM_ID_ENV, raising=False)
+    assert not share.configured()
+
+
+def test_the_form_can_be_pointed_somewhere_else_without_a_release(monkeypatch):
+    monkeypatch.setenv(share.FORM_ID_ENV, "OTHER")
+    monkeypatch.setattr(share, "FIELDS", {"edits": "entry.1"})
+    assert share.configured()
+    assert "/d/e/OTHER/viewform" in share.url({"edits": 1})
+
+
+def test_values_are_percent_encoded(monkeypatch):
+    monkeypatch.setattr(share, "FORM_ID", "F")
+    monkeypatch.setattr(share, "FIELDS", {"os": "entry.1"})
+    assert "entry.1=Mac%20OS%20X" in share.url({"os": "Mac OS X"})
+
+
+def test_opening_the_form_is_the_whole_of_the_mechanism(monkeypatch):
+    """The test that says what this module is: it produces a URL and hands it
+    over. If this ever needs a running server to pass, something has changed
+    that the README is still claiming has not."""
+    monkeypatch.setattr(share, "FORM_ID", "F")
+    monkeypatch.setattr(share, "FIELDS", {"edits": "entry.1"})
+    opened = []
+    assert share.open_form({"edits": 7}, opener=opened.append) is False
+    assert opened == [share.url({"edits": 7})]
+
+
+def test_a_machine_with_no_browser_is_not_an_error(monkeypatch):
+    monkeypatch.setattr(share, "FORM_ID", "F")
+    monkeypatch.setattr(share, "FIELDS", {"edits": "entry.1"})
+
+    def explode(url):
+        raise RuntimeError("no browser here")
+
+    assert share.open_form({"edits": 1}, opener=explode) is False

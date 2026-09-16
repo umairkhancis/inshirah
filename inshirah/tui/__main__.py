@@ -12,6 +12,7 @@ import asyncio
 import os
 import pathlib
 import subprocess
+import sys
 
 from inshirah import __version__
 from inshirah.core import (
@@ -22,6 +23,8 @@ from inshirah.core import (
     explain_setup_failure,
     privacy_report,
     probe,
+    share,
+    usage,
 )
 from inshirah.core.setup import MISSING
 
@@ -122,6 +125,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "kept, then exit. Free: it asks nothing and starts nothing.",
     )
     parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="print what this copy of Inshirah has counted — sessions, edits, "
+        "threads — and offer to send those numbers to the project through your "
+        "own browser, then exit. Nothing is sent unless you say so.",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="report what this directory loads — CLAUDE.md and project memory, "
@@ -205,6 +215,43 @@ def check(harness: Harness) -> int:
     return 1 if environment.broken_mcp else 0
 
 
+def stats() -> int:
+    """``--stats`` — show the counts, and offer to hand them over.
+
+    The asking is done here rather than in ``core`` because it is a
+    conversation with a person at a terminal, and ``core`` does not have one.
+    What it must not do is proceed on silence: the prompt defaults to no, a
+    pipe or a cron job is told it was not asked rather than being treated as
+    consent, and ctrl-c at the prompt is an answer, not a crash.
+    """
+    print(usage.report())
+    print()
+    if not share.configured():
+        print(share.UNCONFIGURED)
+        return 0
+    print(share.CONSENT)
+    print()
+    if not sys.stdin.isatty():
+        print(share.NOT_INTERACTIVE)
+        return 0
+    try:
+        answer = input("  Send them? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print(share.DECLINED)
+        return 0
+    print()
+    if answer not in ("y", "yes"):
+        print(share.DECLINED)
+        return 0
+    payload = usage.summary()
+    if share.open_form(payload):
+        print(share.SENT)
+    else:
+        print(share.NO_BROWSER.format(url=share.url(payload)))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     harness = harness_from(args)
@@ -213,10 +260,16 @@ def main(argv: list[str] | None = None) -> None:
     if args.privacy:
         print(privacy_report(CONVERSATIONS))
         raise SystemExit(0)
+    if args.stats:
+        raise SystemExit(stats())
     if args.check:
         raise SystemExit(check(harness))
     if args.serve:
         raise SystemExit(serve(args, harness.project))
+    # Below here a session is genuinely starting. The flags above all exit, and
+    # counting them would make "sessions" mean "times the binary ran", which is
+    # the denominator of every other number here.
+    usage.start_session()
     InshirahApp(harness, storage_for(harness.project)).run()
 
 

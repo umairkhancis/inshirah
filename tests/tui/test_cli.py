@@ -8,7 +8,8 @@ Inshirah mentions them.
 
 import pytest
 
-from inshirah.tui.__main__ import harness_from, parse_args
+from inshirah.core import share
+from inshirah.tui.__main__ import harness_from, parse_args, stats
 
 
 def harness(*argv):
@@ -236,3 +237,92 @@ def test_the_readme_tells_people_to_run_the_installer_that_exists():
     readme = __import__("pathlib").Path("README.md").read_text()
     assert "install.sh | sh" in readme
     assert "install.ps1 | iex" in readme
+
+
+# --- --stats, and the gate in front of it ----------------------------------
+#
+# The only way this feature can do harm is by sending when it was not asked to,
+# so these tests are all the same test from different angles: what happens on
+# anything other than a person typing yes.
+
+
+@pytest.fixture
+def form(monkeypatch):
+    """A configured form, and a record of what the browser was handed."""
+    monkeypatch.setattr(share, "FORM_ID", "TEST")
+    monkeypatch.setattr(share, "FIELDS", {"edits": "entry.1"})
+    opened: list[str] = []
+    monkeypatch.setattr(share.webbrowser, "open", lambda u: opened.append(u) or True)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    return opened
+
+
+def answer(monkeypatch, text):
+    monkeypatch.setattr("builtins.input", lambda _: text)
+
+
+def test_stats_is_a_flag_that_exits_rather_than_starting_a_session():
+    assert parse_args(["--stats"]).stats is True
+    assert parse_args([]).stats is False
+
+
+def test_saying_yes_hands_the_numbers_to_the_browser(form, monkeypatch):
+    answer(monkeypatch, "y")
+    stats()
+    assert form and form[0].startswith("https://docs.google.com/forms/d/e/TEST/")
+
+
+def test_saying_nothing_sends_nothing(form, monkeypatch):
+    """Enter is the default, and the default is no."""
+    answer(monkeypatch, "")
+    stats()
+    assert form == []
+
+
+def test_saying_no_sends_nothing(form, monkeypatch):
+    answer(monkeypatch, "n")
+    stats()
+    assert form == []
+
+
+def test_an_answer_that_is_not_yes_is_not_yes(form, monkeypatch):
+    answer(monkeypatch, "sure, why not")
+    stats()
+    assert form == []
+
+
+def test_ctrl_c_at_the_prompt_is_an_answer_and_not_a_crash(form, monkeypatch):
+    def interrupt(_):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("builtins.input", interrupt)
+    assert stats() == 0
+    assert form == []
+
+
+def test_a_pipe_is_not_consent(form, monkeypatch):
+    """`yes | inshirah --stats` must not be a way to agree, and neither must a
+    cron job that happens to run the flag."""
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    answer(monkeypatch, "y")
+    stats()
+    assert form == []
+
+
+def test_an_unconfigured_build_never_even_asks(monkeypatch, capsys):
+    monkeypatch.setattr(share, "FORM_ID", "")
+    monkeypatch.setattr(share, "FIELDS", {})
+    monkeypatch.delenv(share.FORM_ID_ENV, raising=False)
+
+    def never(_):
+        raise AssertionError("asked despite having nowhere to send it")
+
+    monkeypatch.setattr("builtins.input", never)
+    assert stats() == 0
+    assert "nowhere to send" in capsys.readouterr().out
+
+
+def test_the_counts_are_printed_whether_or_not_they_are_shared(form, monkeypatch, capsys):
+    answer(monkeypatch, "n")
+    stats()
+    assert "What this copy of Inshirah has counted" in capsys.readouterr().out

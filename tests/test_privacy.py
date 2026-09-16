@@ -60,7 +60,17 @@ def test_the_package_imports_no_network_client():
 def test_nothing_in_the_package_names_a_remote_host():
     """A URL in the source is the other shape this leak would take. Only the
     documented links are allowed, and they are documentation, not destinations."""
-    allowed = ("https://github.com/umairkhancis", "http://localhost", "http://127.0.0.1")
+    # docs.google.com is the form ``share`` prefills. It is a destination, and
+    # it is the one exception in this file, so it is worth saying why it is not
+    # a hole: the package cannot reach it. Nothing here opens a connection to
+    # that URL — it is handed to ``webbrowser``, and a person decides. If a
+    # network client ever appears alongside it, the test above fails first.
+    allowed = (
+        "https://github.com/umairkhancis",
+        "https://docs.google.com/forms/",
+        "http://localhost",
+        "http://127.0.0.1",
+    )
     for path in PACKAGE.rglob("*.py"):
         for line in path.read_text().splitlines():
             for scheme in ("http://", "https://"):
