@@ -38,7 +38,7 @@ from claude_agent_sdk import (
 from .config import PROVIDER, PROVIDER_NAME
 from .harness import Harness
 from .environment import Environment
-from . import shell
+from . import shell, usage
 from .commands import SlashCommand, parse as parse_commands
 from .errors import (
     ConversationBusy,
@@ -125,6 +125,11 @@ class Conversation:
             # mid-session shows up without a restart.
             self._commands: tuple[SlashCommand, ...] = ()
         self.root._index[self.id] = self
+        # A conversation being started, as opposed to one being rehydrated:
+        # ``restore`` passes back the id it saved, so an id supplied here
+        # means this tree already existed and was counted when it did.
+        if parent is None and id is None:
+            usage.record("conversations")
 
     def thread_for(self, uuid: str) -> "Conversation":
         """The thread hanging off a message, created on first use."""
@@ -138,6 +143,7 @@ class Conversation:
             uuids = [t.uuid for t in self.turns]
             thread.inherited = uuids.index(uuid) + 1 if uuid in uuids else 0
             self.threads[uuid] = thread
+            usage.record("threads")
         return self.threads[uuid]
 
     @property
@@ -315,6 +321,7 @@ class Conversation:
             raise ConversationBusy("a turn is running; wait for it to finish")
         result = await shell.run(command, self.harness.project)
         self.pending.append(result.as_message())
+        usage.record("shell_holds")
         return Turn("user", result.as_message(), f"pending:{len(self.pending) - 1}")
 
     def edit_pending(self, handle: str, new_text: str) -> None:
@@ -390,6 +397,7 @@ class Conversation:
             raise SendFailed(failure)
 
         self._sync()
+        usage.record("turns")
         return self.turns[-1]
 
     def _sync(self) -> None:
@@ -473,11 +481,16 @@ class Conversation:
             raise NothingToEdit("nothing to edit yet")
         if self.busy:
             raise ConversationBusy("a turn is running; cannot edit right now")
+        # Read before the rewrite: ``_sync`` rebuilds ``turns`` from the
+        # store, and whose message this was is the half of the count worth
+        # having.
+        role = next((t.role for t in self.turns if t.uuid == uuid), "")
         dropped = self.store.edit(self.session_id, uuid, new_text)
         if dropped < 0:
             raise MessageNotFound("message not found in the stored transcript")
         self._sync()
         self.prune_unstartable_threads()
+        usage.record_edit(role)
         return dropped
 
     async def edit_and_resend(self, uuid: str, new_text: str) -> Turn:
@@ -491,7 +504,10 @@ class Conversation:
         if self.session_id is None:
             raise NothingToEdit("nothing to resend yet")
         async with self.root._lock:
-            return await self._resend(uuid, new_text)
+            turn = await self._resend(uuid, new_text)
+        usage.record_edit("user")
+        usage.record("resends")
+        return turn
 
     async def _resend(self, uuid: str, new_text: str) -> Turn:
         """Truncate and re-ask as one indivisible turn — the lock is held."""
@@ -692,4 +708,5 @@ class Conversation:
         path = out / f"session-{datetime.now().strftime('%Y%m%d-%H%M%S')}.md"
         path.write_text(text)
         (out / "latest.md").write_text(text)  # stable path, easy to reference
+        usage.record("exports")
         return path

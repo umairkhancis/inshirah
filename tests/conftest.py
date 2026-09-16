@@ -9,9 +9,28 @@ import asyncio
 
 import pytest
 
+from inshirah.core import usage
 from inshirah.core.store import TranscriptStore
 
 SESSION = "11111111-2222-3333-4444-555555555555"
+
+
+@pytest.fixture(autouse=True)
+def usage_elsewhere(tmp_path_factory, monkeypatch):
+    """Point the usage counters at a scratch directory, for every test.
+
+    Autouse and unconditional because the counters hang off ordinary engine
+    methods — editing a message counts an edit — so any test that exercises the
+    engine would otherwise write to the developer's real ``~/.inshirah``, and
+    the first symptom would be a number in ``--stats`` that no one could
+    account for.
+
+    Deliberately *not* under the test's own ``tmp_path``: several tests assert
+    that a directory they were given is untouched, and a counter appearing in
+    it would make them fail for a reason that has nothing to do with what they
+    are checking.
+    """
+    monkeypatch.setattr(usage, "DIRECTORY", tmp_path_factory.mktemp("usage"))
 
 
 def user_entry(uuid: str, text: str) -> dict:
