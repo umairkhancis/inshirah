@@ -12,8 +12,8 @@ class Inshirah < Formula
 
   desc "Thoughtful surface over Claude Code: edit any message, branch any thread"
   homepage "https://github.com/umairkhancis/inshirah"
-  url "https://files.pythonhosted.org/packages/b5/63/4765132c3f489bc65e76f854a8df23a3973a28d6f18de9cd7e2e187fef9b/inshirah-0.1.0.tar.gz"
-  sha256 "f5fba5c8aac8ceffbb53e559de23c610e14b83738c639a5f7bc085858134bbf6"
+  url "https://files.pythonhosted.org/packages/7e/11/7c6de7b436dadefbd68657b4075a1a0d0cb97b26c8eafaf4eb625b340185/inshirah-0.1.1.tar.gz"
+  sha256 "d09612405c86d596e78e45e3c43c05f36132ab3fefb22996e460b8a7bd27f3be"
   license "MIT"
 
   depends_on "python@3.13"
@@ -213,8 +213,8 @@ class Inshirah < Formula
   end
 
   resource "platformdirs" do
-    url "https://files.pythonhosted.org/packages/f4/e1/5b7b8bbb55084d1425bcb9bc823ff519e1b2be05f6ebb0089e2eacc38413/platformdirs-4.11.8-py3-none-any.whl"
-    sha256 "52f2f181bbfde907966932cc8312d967d02976422d66d537ea16092b8e291081"
+    url "https://files.pythonhosted.org/packages/f3/94/803ba86705257d7eedddac4b02eb88a7483b1600e9200c1fefc6f1a9a3ff/platformdirs-4.11.9-py3-none-any.whl"
+    sha256 "0a3958f58a9e30321eaef0a424dd0b77cce242886b36b8aa992f9731ef2d59c1"
   end
 
   resource "propcache" do

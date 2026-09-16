@@ -39,9 +39,13 @@ def resolve(version):
     with tempfile.TemporaryDirectory() as tmp:
         report = Path(tmp) / "report.json"
         subprocess.run(
+            # --no-cache-dir because this runs minutes after the upload, when
+            # pip's cached copy of the index still predates the release and
+            # resolution fails with "no matching distribution" for a version
+            # PyPI is already serving.
             [PYTHON, "-m", "pip", "install", "-q", "--disable-pip-version-check",
-             "--dry-run", "--ignore-installed", f"--report={report}",
-             f"{NAME}=={version}"],
+             "--no-cache-dir", "--dry-run", "--ignore-installed",
+             f"--report={report}", f"{NAME}=={version}"],
             check=True,
         )
         data = json.loads(report.read_text())
