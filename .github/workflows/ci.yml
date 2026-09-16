@@ -1,0 +1,25 @@
+# The suite is the promise: it is what holds the no-backend claim (see
+# tests/test_privacy.py) and what a stranger reads before trusting an AI surface
+# with their source tree. So it runs on every push, not only before a release.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from pyproject, and the newest — a package installed with
+        # `uvx` runs on whatever Python the machine happens to have.
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv --python ${{ matrix.python }}
+      - run: uv pip install -e '.[dev]'
+      - run: uv run pytest -q

@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+exports/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Working notes, not documentation of the product: the phase brief, the bug
+# list, the design questions, the commercial thinking. Everything else in docs/
+# is published.
+docs/PROMPT.md
+docs/edit-in-place.md
+docs/design-decisions.md
+docs/commercialization.md
+docs/bug.md

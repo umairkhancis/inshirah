@@ -1,0 +1,76 @@
+[project]
+name = "inshirah"
+dynamic = ["version"]  # single-sourced from inshirah/__init__.py
+description = "A conversation whose messages can be edited in place and branched into threads."
+readme = "README.md"  # also the PyPI page, so it is written for a stranger
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Umair Khan", email = "umairkhan.cis@gmail.com" }]
+keywords = ["claude", "claude-code", "ai", "tui", "agent", "conversation"]
+# No license classifier: PEP 639 replaced it with the `license` expression
+# above, and setuptools now refuses a build that carries both.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "claude-agent-sdk>=0.2.152",
+    # Required, not optional: the only console script this package ships is the
+    # TUI, so an install without textual produces a command that cannot start.
+    # `inshirah.core` still imports nothing from textual — that is the seam a
+    # sibling web client relies on, and it is enforced by imports, not packaging.
+    "textual>=8.2.8",
+    # Also required, since 0.1.0: the terminal and the browser are both
+    # advertised front doors onto the same local app, and an install where
+    # `inshirah --serve` fails is a promise the README already made and broke.
+    # It serves on loopback from the user's own machine, so this buys a second
+    # interface, not a backend.
+    "textual-serve>=1.1.3",
+]
+
+[project.urls]
+# No remote is configured yet; these are where it is going, and they are what
+# PyPI renders as the project's links.
+Homepage = "https://github.com/umairkhancis/inshirah"
+Source = "https://github.com/umairkhancis/inshirah"
+Issues = "https://github.com/umairkhancis/inshirah/issues"
+
+[project.scripts]
+# So a project can be worked in with `inshirah` the way it would be with
+# `claude` — from that directory, with no paths to remember.
+inshirah = "inshirah.tui.__main__:main"
+
+[project.optional-dependencies]
+# `inshirah[web]` used to be how --serve was installed. It is a base dependency
+# now, so this is kept only so that instruction keeps resolving instead of
+# erroring at people who read an older README.
+web = ["textual-serve>=1.1.3"]
+dev = ["pytest>=9.1.1", "build>=1.2", "twine>=6.0"]
+
+[build-system]
+# 77 for PEP 639 (`license = "MIT"` as an SPDX string rather than a table).
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "inshirah.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["inshirah*"]
+
+[tool.setuptools.package-data]
+# The stylesheet is the design system; an install without it has no design, and
+# an editable install hides that by loading it straight from the source tree.
+"inshirah.tui" = ["*.tcss"]
+
+[tool.pytest.ini_options]
+# The repo root, so `inshirah` imports the same way from every test directory,
+# and `tests`, so the shared entry builders in conftest.py stay importable.
+pythonpath = [".", "tests"]
+testpaths = ["tests"]

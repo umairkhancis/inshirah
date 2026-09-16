@@ -1,0 +1,621 @@
+/* Inshirah's stylesheet.
+ *
+ * Every colour is a theme token from design.py — no literal colours below, so
+ * both themes restyle the whole surface and neither is an afterthought.
+ *
+ * Three columns: the rail you navigate by, the conversation you are in, and the
+ * thread you opened off it. The third only exists while a thread is open.
+ */
+
+/* ── top bar ──────────────────────────────────────────────────────────── */
+
+#topbar {
+    dock: top;
+    height: 1;
+    background: $rail-edge;
+    color: $rail-muted;
+}
+
+#where {
+    width: 1fr;
+    padding: 0 2;
+    color: $rail-muted;
+}
+
+#mode {
+    width: auto;
+    padding: 0 1;
+    background: $primary 20%;
+    color: $rail-text;
+    text-style: bold;
+}
+
+#loaded {
+    width: auto;
+    padding: 0 2;
+    color: $rail-muted;
+}
+
+/* ── body ─────────────────────────────────────────────────────────────── */
+
+#body {
+    height: 1fr;
+}
+
+/* ── rail ─────────────────────────────────────────────────────────────── */
+
+#rail {
+    width: 30;
+    background: $rail;
+    color: $rail-text;
+    border-right: vkey $rail-edge;
+}
+
+#rail.hidden {
+    display: none;
+}
+
+#wordmark-small {
+    height: 2;
+    padding: 1 2 0 2;
+    color: $rail-text;
+    text-style: bold;
+}
+
+.rail-section {
+    height: 2;
+    padding: 1 2 0 2;
+    color: $rail-muted;
+}
+
+#rail-items {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+}
+
+.rail-item {
+    height: auto;
+    layout: horizontal;
+    padding: 0 1;
+    color: $rail-muted;
+}
+
+.rail-item:hover {
+    background: $rail-raised;
+    color: $rail-text;
+}
+
+.rail-item.current {
+    background: $rail-active;
+    color: $rail-text;
+    text-style: bold;
+}
+
+.rail-name {
+    width: 1fr;
+    height: 1;
+}
+
+.rail-count {
+    width: auto;
+    height: 1;
+    color: $rail-muted;
+}
+
+.rail-item.current .rail-count {
+    color: $rail-text;
+}
+
+#new-conversation {
+    width: 100%;
+    height: 1;
+    margin: 0 2;
+    border: none;
+    background: $rail-raised;
+    color: $rail-text;
+    text-style: none;
+}
+
+#new-conversation:hover {
+    background: $primary;
+}
+
+/* ── panes ────────────────────────────────────────────────────────────── */
+
+.pane {
+    width: 1fr;
+    background: $background;
+}
+
+#thread-pane {
+    width: 48;
+    min-width: 32;
+    background: $surface;
+    border-left: vkey $border;
+}
+
+#thread-pane.hidden {
+    display: none;
+}
+
+/* Two rows, not one: the bottom border eats a row of its own, and a header
+ * with a border but no content height renders as nothing at all. */
+.pane-head {
+    height: 2;
+    background: $surface;
+    border-bottom: hkey $border;
+}
+
+#thread-pane .pane-head {
+    background: $panel;
+}
+
+.pane-title {
+    width: 1fr;
+    padding: 0 2;
+    color: $foreground;
+    text-style: bold;
+}
+
+.pane-meta {
+    width: auto;
+    padding: 0 2;
+    color: $text-muted;
+}
+
+.pane-close {
+    width: 4;
+    height: 1;
+    border: none;
+    background: transparent;
+    color: $text-muted;
+}
+
+.pane-close:hover {
+    background: $error;
+    color: $background;
+}
+
+.messages {
+    height: 1fr;
+    padding: 1 2 0 1;
+    scrollbar-size-vertical: 1;
+}
+
+/* ── one message ──────────────────────────────────────────────────────── */
+
+.message {
+    height: auto;
+    width: 100%;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+.message:hover {
+    background: $boost;
+}
+
+/* Selection is what every editing and threading key acts on, so it is the
+ * loudest thing on the screen. */
+.message.selected {
+    background: $boost;
+    border-left: thick $accent;
+    padding: 0 1 0 0;
+}
+
+.avatar {
+    width: 4;
+    height: 1;
+    margin-right: 1;
+    text-align: center;
+    text-style: bold;
+    color: $background;
+}
+
+.avatar.user {
+    background: $primary;
+}
+
+.avatar.assistant {
+    background: $success;
+}
+
+.avatar.shell {
+    background: $secondary;
+}
+
+/* A slash command's output comes from the CLI, not from the model. */
+.avatar.command {
+    background: $accent;
+}
+
+.message.command .author {
+    color: $accent;
+}
+
+.message.held .avatar {
+    background: $accent;
+}
+
+.message-main {
+    width: 1fr;
+    height: auto;
+}
+
+.message-head {
+    height: 1;
+}
+
+.author {
+    width: auto;
+    color: $foreground;
+    text-style: bold;
+}
+
+.meta {
+    width: 1fr;
+    padding-left: 2;
+    color: $text-muted;
+}
+
+.body {
+    height: auto;
+    width: 100%;
+}
+
+.message.held .body {
+    color: $text-muted;
+}
+
+/* The affordance a chat app trains you to click. */
+.replies {
+    height: 1;
+    width: auto;
+    color: $primary;
+}
+
+.replies:hover {
+    background: $primary 20%;
+    text-style: bold;
+}
+
+.message Collapsible {
+    border: none;
+    background: $boost;
+    padding: 0;
+    margin: 0;
+}
+
+.message CollapsibleTitle {
+    padding: 0 1;
+    color: $accent;
+}
+
+.message Contents {
+    padding: 0 1 0 2;
+}
+
+.tool-call {
+    height: auto;
+    color: $text-muted;
+}
+
+.working {
+    height: 1;
+    padding: 0 1;
+    color: $accent;
+    text-style: bold;
+}
+
+.thread-divider {
+    height: 1;
+    width: 100%;
+    margin-bottom: 1;
+    text-align: center;
+    color: $text-muted;
+}
+
+/* ── editor ───────────────────────────────────────────────────────────── */
+
+#editor {
+    height: auto;
+    max-height: 18;
+    margin: 0 0 1 0;
+    padding: 0 1;
+    border: none;
+    border-left: thick $accent;
+    background: $panel;
+}
+
+#editor:focus {
+    border-left: thick $accent;
+}
+
+/* ── composer ─────────────────────────────────────────────────────────── */
+
+.composer {
+    dock: bottom;
+    height: auto;
+    background: $surface;
+    border-top: hkey $border;
+}
+
+.composer-row {
+    height: auto;
+    padding: 1 2 0 2;
+}
+
+.composer-glyph {
+    width: 2;
+    height: 1;
+    color: $primary;
+    text-style: bold;
+}
+
+.composer.shell .composer-glyph {
+    color: $secondary;
+}
+
+.composer-input {
+    width: 1fr;
+    height: 1;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
+.composer-input:focus {
+    border: none;
+}
+
+.composer-hint {
+    height: 1;
+    padding: 0 2 0 4;
+    color: $text-muted;
+}
+
+/* ── slash commands ───────────────────────────────────────────────────── */
+
+/* Sits above the input, inside the composer, so it grows upward into the
+ * transcript the way a completion popup should. */
+.command-menu {
+    height: auto;
+    max-height: 12;
+    margin: 0 2;
+    padding: 0;
+    background: $panel;
+    border: round $border;
+    scrollbar-size-vertical: 1;
+}
+
+.command-option {
+    layout: horizontal;
+    height: 1;
+    width: 100%;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+.command-option:hover {
+    background: $boost;
+}
+
+.command-option.current {
+    background: $primary 25%;
+    color: $foreground;
+}
+
+.command-name {
+    width: auto;
+    min-width: 18;
+    color: $primary;
+    text-style: bold;
+}
+
+.command-option.current .command-name {
+    color: $foreground;
+}
+
+.command-args {
+    width: auto;
+    padding-right: 2;
+    color: $accent;
+}
+
+.command-desc {
+    width: 1fr;
+    color: $text-muted;
+}
+
+.command-source {
+    width: auto;
+    padding: 0 1;
+    background: $success 25%;
+    color: $success;
+}
+
+/* ── landing ──────────────────────────────────────────────────────────── */
+
+#welcome {
+    height: auto;
+    width: 100%;
+    align-horizontal: center;
+}
+
+.welcome-card {
+    height: auto;
+    width: 72;
+    max-width: 100%;
+    padding: 2 2 1 2;
+}
+
+.wordmark {
+    height: 2;
+    color: $primary;
+    text-style: bold;
+}
+
+.tagline {
+    height: auto;
+    margin-bottom: 1;
+    color: $foreground;
+}
+
+.facts {
+    height: auto;
+    margin-bottom: 1;
+}
+
+.fact {
+    width: 1fr;
+    height: auto;
+    padding: 0 1;
+    background: $boost;
+    color: $text-muted;
+}
+
+.section {
+    height: 2;
+    padding-top: 1;
+    color: $text-muted;
+    text-style: bold;
+}
+
+.starter {
+    layout: horizontal;
+    height: auto;
+    width: 100%;
+    margin-bottom: 1;
+    padding: 0 1;
+    border-left: outer $border;
+}
+
+.starter:hover {
+    background: $boost;
+    border-left: outer $primary;
+}
+
+.starter-glyph {
+    width: 3;
+    height: 1;
+    color: $primary;
+    text-style: bold;
+}
+
+.starter-main {
+    width: 1fr;
+    height: auto;
+}
+
+.starter-headline {
+    height: 1;
+    color: $foreground;
+    text-style: bold;
+}
+
+.starter-prompt {
+    height: auto;
+    color: $text-muted;
+}
+
+.footnote {
+    height: auto;
+    margin-top: 1;
+    padding: 1 1 0 1;
+    border-top: hkey $border;
+    color: $text-muted;
+}
+
+/* ── modals ───────────────────────────────────────────────────────────── */
+
+ModalScreen {
+    align: center middle;
+    background: $background 70%;
+}
+
+.panel {
+    background: $surface;
+    padding: 1 2;
+}
+
+.panel-title {
+    height: 1;
+    margin-bottom: 1;
+    color: $accent;
+    text-style: bold;
+}
+
+PermissionRequest #box {
+    width: 72;
+    max-width: 90%;
+    height: auto;
+    border: round $accent;
+}
+
+PermissionRequest #detail {
+    height: auto;
+    margin-bottom: 1;
+    padding: 0 1;
+    background: $boost;
+    color: $foreground;
+}
+
+.panel #why {
+    height: auto;
+    margin-bottom: 1;
+    color: $text-muted;
+}
+
+.panel #choices {
+    height: auto;
+    align-horizontal: right;
+}
+
+.panel Button {
+    height: 1;
+    min-width: 12;
+    margin-left: 2;
+    border: none;
+}
+
+EnvironmentReport #report {
+    width: 84;
+    max-width: 90%;
+    height: 80%;
+    border: round $primary;
+}
+
+EnvironmentReport #body {
+    height: auto;
+}
+
+RenameConversation #box {
+    width: 60;
+    max-width: 90%;
+    height: auto;
+    border: round $primary;
+}
+
+RenameConversation Input {
+    margin-bottom: 1;
+}
+
+/* ── chrome ───────────────────────────────────────────────────────────── */
+
+Footer {
+    background: $surface;
+}
+
+Toast {
+    background: $panel;
+    border-left: thick $primary;
+}
+
+Toast.-error {
+    border-left: thick $error;
+}
+
+Toast.-warning {
+    border-left: thick $warning;
+}
